@@ -1,5 +1,5 @@
 /* Кэш для работы без интернета: stale-while-revalidate для файлов этого же сайта. */
-const CACHE = 'trainer-v4';
+const CACHE = 'trainer-v11';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'data.js', 'manifest.webmanifest', 'icons/180.png', 'icons/192.png', 'icons/512.png'];
 
 self.addEventListener('install', e => {

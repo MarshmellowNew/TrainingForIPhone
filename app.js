@@ -10,32 +10,44 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('tr:' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('tr:' + k, JSON.stringify(v)); } catch (e) { /* приватный режим */ } },
 };
-const settings = Object.assign({ names: true, tips: true, count: 'voice', rate: 1 }, store.get('settings', {}));
+const settings = Object.assign({ names: true, tips: true, count: 'voice', rate: 0.95, voice: '' }, store.get('settings', {}));
 const saveSettings = () => store.set('settings', settings);
 const hist = () => store.get('hist', []);
 const PROFILE0 = { set: false, gender: 'male', h: 183, w: 67, goal: 75, exp: 2, act: 0 };
 const profile = () => Object.assign({}, PROFILE0, store.get('profile', {}));
-const EXPS = ['Не занимался', 'До 6 месяцев', '6–24 месяца', 'Больше 2 лет'], ACTS = ['Сидячий', 'Лёгкая активность', 'Очень активный'];
+const expsList = g => [g === 'female' ? 'Не занималась' : 'Не занимался', 'До 6 месяцев', '6–24 месяца', 'Больше 2 лет'],
+  DEF = { male: { h: 183, w: 67, goal: 75 }, female: { h: 159, w: 49, goal: 49 } }, ACTS = ['Сидячий', 'Лёгкая активность', 'Очень активный'];
 /* Подбор программ по росту, весу, цели, опыту и активности */
 function recommend(p = profile()) {
   const bmi = p.w / Math.pow(p.h / 100, 2), delta = p.goal - p.w, goal = delta >= 2 ? 'gain' : delta <= -2 ? 'lose' : 'tone';
   let level = Math.min(5, Math.max(1, Math.round((p.exp * 2 + p.act) / 8 * 4) + 1));
+  if (p.test && p.test.k) level = p.test.k < 0.7 ? 1 : p.test.k < 1 ? 2 : p.test.k < 1.3 ? 3 : p.test.k < 1.6 ? 4 : 5; // тест точнее анкеты
   if (bmi >= 30) level = Math.min(level, 2);
   const out = [], add = (pid, why) => { if (!out.some(x => x.pid === pid)) out.push({ pid, why }); };
-  const absId = level === 1 ? 'abs-new' : level === 2 ? (goal === 'lose' ? 'abs-lose' : 'abs-new') : level === 3 ? 'abs-adv' : level === 4 ? 'abs-pro' : 'abs-ins';
-  if (prog(absId).stub) { add(absId, 'самая подходящая по уровню, появится позже'); if (level >= 3) add('abs-adv', 'пока ближайшая из готовых'); } else add(absId, 'подходит по уровню подготовки');
-  const male = p.gender === 'male';
-  if (goal === 'gain') { add('db-split', 'набор мышечной массы'); add(male ? 'legs-3' : 'glutes-3', 'крупные группы мышц дают основной прирост'); }
-  else if (goal === 'lose') { add(male ? 'legs-3' : 'glutes-3', 'крупные мышцы тратят больше всего калорий'); add('db-split', 'сохраняет мышцы при похудении'); }
-  else { add(male ? 'db-split' : 'glutes-3', 'тонус и форма'); add('legs-3', 'ноги работают вместе с общим тонусом'); }
+  const female = p.gender === 'female';
+  const absId = level <= 2 ? 'abs-new' : level === 3 ? 'abs-adv' : 'abs-pro';
+  add(absId, p.test ? 'подобрано по результату теста' : 'подходит по уровню подготовки');
+  const dbId = level <= 1 ? 'db-new' : level === 2 ? 'db-all' : 'db-split';
+  if (goal === 'gain') { add(female ? 'glutes-3' : dbId, female ? 'форма и рост мышц ягодиц и ног' : 'набор мышечной массы'); add(female ? dbId : 'legs-3', 'крупные группы мышц дают основной прирост'); }
+  else if (goal === 'lose') { add(level <= 2 || female ? 'db-lose' : dbId, 'много повторений с лёгкими гантелями, больше расход калорий'); add(female ? 'glutes-3' : 'legs-3', 'крупные мышцы тратят больше всего калорий'); }
+  else { add(female ? 'glutes-3' : dbId, 'тонус и форма'); add(female ? 'legs-3' : 'legs-3', 'ноги работают вместе с общим тонусом'); }
+  if (goal === 'lose') { const i = out.findIndex(x => x.pid === 'abs-new' || x.pid === 'abs-adv' || x.pid === 'abs-pro'); if (i >= 0 && level <= 3) out[i] = { pid: 'abs-lose', why: 'кардио-интервалы и пресс для снижения веса' }; }
+  if (!female && goal === 'gain') add(level <= 2 ? 'chest-new' : level === 3 ? 'chest-db' : 'chest-adv', 'грудь и спина растут вместе с общей массой');
+  if (level >= 3) add(level >= 4 ? 'back-mix' : 'back-bar-new', 'турник и гантели для спины');
+  if (female && level >= 4) add('glutes-adv', 'тяжёлые гантели для ягодиц');
+  if (female && level <= 2) add('core', 'кор улучшает осанку и устойчивость');
+  { const per = level >= 5 ? 5 : level >= 3 ? 3 : 2; add(`gym-${level}-${per}`, 'тренировка в зале по группам мышц'); }
   const notes = [];
   if (goal === 'gain') notes.push(`Цель +${num(Math.round(delta * 10) / 10)} кг: безопасный темп около 0,25–0,5 кг в неделю. Тренировки дают стимул, но нужен профицит калорий и белок в рационе.`);
   if (goal === 'lose') notes.push(`Цель ${num(Math.round(delta * 10) / 10)} кг: безопасный темп 0,5–1 кг в неделю. Нужен умеренный дефицит калорий, тренировки его поддерживают.`);
+  if (goal === 'tone') notes.push('Цель: сохранить вес и улучшить форму. Увеличивай нагрузку постепенно: +1 повторение за неделю.');
   if (bmi < 18.5) notes.push('Индекс массы тела ниже нормы: следи за питанием, не гони нагрузку.');
   if (bmi >= 30) notes.push('Индекс массы тела высокий: начинай с лёгкого уровня, прыжки заменяй шагом и не спеши.');
-  if (p.exp <= 1) notes.push('На старте хватит 3 тренировок в неделю. Остальное добавляй, когда исчезнет сильная усталость.');
+  if (p.exp <= 1) notes.push(female ? 'На старте хватит 3 тренировок в неделю. Остальное добавляй, когда исчезнет сильная усталость.' : 'На старте хватит 3 тренировок в неделю. Остальное добавляй, когда исчезнет сильная усталость.');
   if (p.act === 0) notes.push('Сидячая работа: каждый час вставай и разминайся, это помогает спине и ягодицам.');
-  return { bmi, goal, level, items: out.slice(0, 3), notes };
+  if (female) notes.push('Для девушек гантели по умолчанию вдвое легче, а число повторений без веса ×0,85. Это можно подстроить тестом на максимум.');
+  if (!p.test) notes.push('Хочешь точнее? Пройди «Тест на максимум»: приложение подгонит повторения под твои силы.');
+  return { bmi, goal, level, items: out.slice(0, 5), notes };
 }
 const getW = (ex, def) => store.get('w:' + ex, def);
 const setW = (ex, v) => store.set('w:' + ex, v);
@@ -50,7 +62,7 @@ const dayData = (p, d) => p.day(d);
 const thumb = ex => EX[ex].gif ? `gif/t_${EX[ex].gif}.jpg` : `img/t_${EX[ex].img}.jpg`;
 const figHtml = ex => {
   if (!ex) return '<div class="fig"></div>';
-  const e = EX[ex], tip = e.tip ? `<button class="tipbtn" id="tipbtn" aria-label="Совет по технике">${I.info}</button>` : '', chip = e.side ? '<span class="chip">на каждую ногу</span>' : '';
+  const e = EX[ex], tip = e.tip ? `<button class="tipbtn" id="tipbtn" aria-label="Совет по технике">${I.info}</button>` : '', chip = e.side ? `<span class="chip">на каждую ${e.side}</span>` : '';
   return e.gif ? `<div class="fig gif"><img src="gif/${e.gif}.gif" alt="">${chip}${tip}</div>`
     : `<div class="fig"><img class="a" src="img/${e.img}_0.jpg" alt=""><img class="b" src="img/${e.img}_1.jpg" alt="">${chip}${tip}</div>`;
 };
@@ -147,7 +159,8 @@ const Snd = {
   pickVoice() {
     if (this.voice || !('speechSynthesis' in window)) return this.voice;
     const vs = speechSynthesis.getVoices().filter(v => /^ru/i.test(v.lang));
-    this.voice = vs.find(v => /milena|yuri|enhanced|premium/i.test(v.name)) || vs[0] || null; return this.voice;
+    const soft = /premium|enhanced|siri|улучш|расшир|natural|neural/i, fem = /milena|katya|alena|svetlana|irina|female|женск/i;
+    this.voice = (settings.voice && vs.find(v => v.voiceURI === settings.voice)) || vs.find(v => soft.test(v.name) && fem.test(v.name)) || vs.find(v => soft.test(v.name)) || vs.find(v => fem.test(v.name)) || vs[0] || null; return this.voice;
   },
   say(text, cancel = true) {
     if (!('speechSynthesis' in window)) return;
@@ -204,7 +217,7 @@ function currentDay(p) {
   const saved = store.get('day:' + p.id, null); if (saved) return saved;
   const done = doneDays(p.id); let d = 1; while (done.has(d) && d < 100000) d++; return d;
 }
-function tonnage(day) { return day.items.reduce((s, it) => it.sets ? s + it.sets.reduce((a, b) => a + b, 0) * getW(it.ex, it.weight) * 2 : s, 0); }
+function tonnage(day) { return day.items.reduce((s, it) => it.sets && !it.bw ? s + it.sets.reduce((a, b) => a + b, 0) * getW(it.ex, it.weight) * (EX[it.ex].one ? 1 : 2) : s, 0); }
 const kcalOf = (day, ton) => Math.round(day.workSec * 0.133 * (profile().w / 70) + ton / KG_PER_KCAL);
 function dayStats(p, d) {
   const day = dayData(p, d), ton = tonnage(day);
@@ -249,19 +262,39 @@ function viewProfile() {
     <div class="form">
       <div class="lab">Пол</div>${seg('gender', [['male', 'Мужчина'], ['female', 'Девушка']])}
       ${num_('h', 'Рост', 'см', 1)}${num_('w', 'Вес', 'кг', 0.5)}${num_('goal', 'Желаемый вес', 'кг', 0.5)}
-      <div class="lab">Сколько занимаешься спортом</div>${seg('exp', EXPS.map((t, i) => [i, t]))}
+      <div class="lab">Сколько занимаешься спортом</div>${seg('exp', expsList(P.gender).map((t, i) => [i, t]))}
       <div class="lab">Повседневная активность</div>${seg('act', ACTS.map((t, i) => [i, t]))}
     </div>
     <div class="sh">${ic('chart')}Рекомендуем</div>
     <div class="recs">${rec.items.map(x => { const p = prog(x.pid); return `<button class="rrow" data-${p.stub ? 'stub' : 'go'}="${p.stub ? p.id : '#prog-' + p.id}"><div><b>${esc(p.title)}</b><small>${esc(GROUPS.find(g => g.id === p.group).title)} · ${esc(x.why)}</small></div>${bolts(p.level)}</button>`; }).join('')}</div>
     <div class="stat3"><div><b>${num(rec.bmi.toFixed(1))}</b><small>индекс массы тела</small></div><div><b>${rec.goal === 'gain' ? 'набор' : rec.goal === 'lose' ? 'снижение' : 'тонус'}</b><small>цель</small></div><div><b>${rec.level} / 5</b><small>уровень</small></div></div>
     ${rec.notes.map(n => `<div class="note">${esc(n)}</div>`).join('')}
+    <button class="big sec" id="ptest" style="display:block;width:calc(100% - 28px);margin:12px 14px 0">Тест на максимум</button>
     <button class="big" id="psave">Сохранить</button>
   </div>`);
   const cur = Object.assign({}, P, { set: true });
-  document.querySelectorAll('[data-pk]').forEach(b => b.onclick = () => { cur[b.dataset.pk] = b.dataset.pv === 'male' || b.dataset.pv === 'female' ? b.dataset.pv : Number(b.dataset.pv); store.set('profile', cur); viewProfile(); });
+  document.querySelectorAll('[data-pk]').forEach(b => b.onclick = () => {
+    const k = b.dataset.pk, v = b.dataset.pv;
+    if (k === 'gender' && v !== cur.gender) { // при смене пола подставляем типичные значения, если ты их не менял(а)
+      const old = DEF[cur.gender], nw = DEF[v]; ['h', 'w', 'goal'].forEach(f => { if (cur[f] === old[f]) cur[f] = nw[f]; });
+      if (!P.set || cur.exp === PROFILE0.exp) cur.test = null;
+    }
+    cur[k] = (k === 'gender') ? v : Number(v); store.set('profile', cur); viewProfile();
+  });
   document.querySelectorAll('[data-nk]').forEach(i => i.onchange = () => { const v = parseFloat(String(i.value).replace(',', '.')); if (v > 0 && v < 400) { cur[i.dataset.nk] = v; store.set('profile', cur); viewProfile(); } });
   $('#psave').onclick = () => { store.set('profile', cur); go('#home'); };
+  $('#ptest').onclick = () => openSheet(`<h3>Тест на максимум</h3><div class="opt"><small style="font-size:14px;color:#cfcfd2">Размяться 3 минуты. Засекай по 60 секунд на каждое упражнение, между ними отдых 2 минуты. Вводи, сколько получилось, приложение подстроит число повторений под тебя.${P.test ? ' Прошлый результат множитель ×' + num(P.test.k) + '.' : ''}</small></div>
+    <div class="opt"><div>Скручивания за 60 с</div><input class="tin" id="t1" type="number" inputmode="numeric" value="${P.test ? P.test.crunch : ''}"></div>
+    <div class="opt"><div>Приседания за 60 с</div><input class="tin" id="t2" type="number" inputmode="numeric" value="${P.test ? P.test.squat : ''}"></div>
+    <div class="opt"><div>Планка, секунд</div><input class="tin" id="t3" type="number" inputmode="numeric" value="${P.test ? P.test.plank : ''}"></div>
+    <button class="big" id="tok">Рассчитать</button><button class="big sec" id="tcl">Отмена</button>`, () => {
+    $('#tcl').onclick = closeSheet;
+    $('#tok').onclick = () => {
+      const a = +$('#t1').value, b2 = +$('#t2').value, c = +$('#t3').value; if (!(a > 0 && b2 > 0 && c > 0)) return;
+      const ref = cur.gender === 'female' ? [30, 30, 45] : [35, 35, 60], k = Math.min(1.8, Math.max(0.6, Math.round((a / ref[0] + b2 / ref[1] + c / ref[2]) / 3 * 100) / 100));
+      cur.test = { crunch: a, squat: b2, plank: c, k, ts: Date.now() }; store.set('profile', cur); closeSheet(); viewProfile();
+    };
+  });
 }
 
 /* ---------- программа ---------- */
@@ -269,7 +302,7 @@ function viewProgram(pid) {
   const p = prog(pid), d = currentDay(p), day = dayData(p, d), st = dayStats(p, d), done = doneDays(pid);
   const rows = day.items.map(it => {
     const e = EX[it.ex];
-    if (it.sets) return `<div class="it"><img src="${thumb(it.ex)}" alt=""><div class="t"><div>${esc(e.name)}</div><small>${it.sets.join(' + ')}</small></div><button class="kg" data-w="${it.ex}" data-def="${it.weight}">${num(getW(it.ex, it.weight))} кг</button></div>`;
+    if (it.sets) return `<div class="it"><img src="${thumb(it.ex)}" alt=""><div class="t"><div>${esc(e.name)}</div><small>${it.sets.join(' + ')}</small></div>${it.bw ? '' : `<button class="kg" data-w="${it.ex}" data-def="${it.weight}">${num(getW(it.ex, it.weight))} кг</button>`}</div>`;
     return `<div class="it"><img src="${thumb(it.ex)}" alt=""><div class="t"><div>${esc(e.name)}</div><small>${it.time ? fmtT(it.time) : 'x ' + it.reps}</small></div></div>`;
   }).join('');
   const inf = p.info(d, done);
@@ -326,7 +359,7 @@ function viewHistory() {
 }
 
 /* ---------- аналитика: календарь и гистограммы ---------- */
-const GCOL = { abs: '#ff9f0a', db: '#0a84ff', legs: '#30d158', glutes: '#ff5fa2' }; // цвет группы программ (кольцо в календаре)
+const GCOL = { abs: '#ff9f0a', db: '#0a84ff', legs: '#30d158', glutes: '#ff5fa2', back: '#bf5af2', chest: '#ff453a', gym: '#64d2ff' }; // цвет группы программ (кольцо в календаре)
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 const MSHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 const dkey = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
@@ -443,10 +476,12 @@ function openSettings() {
       <div class="opt"><div>Озвучка названий<small>голос iPhone, русский</small></div><div class="seg"><button data-k="names" data-v="1" class="${settings.names ? 'on' : ''}">Вкл</button><button data-k="names" data-v="0" class="${!settings.names ? 'on' : ''}">Выкл</button></div></div>
       <div class="opt"><div>Советы по технике голосом<small>во время упражнения</small></div><div class="seg"><button data-k="tips" data-v="1" class="${settings.tips ? 'on' : ''}">Вкл</button><button data-k="tips" data-v="0" class="${!settings.tips ? 'on' : ''}">Выкл</button></div></div>
       <div class="opt"><div>Последние 4 секунды<small>${Snd.hasVoice ? 'найден пакет голоса' : 'голос iPhone или сигналы'}</small></div><div class="seg"><button data-k="count" data-v="voice" class="${settings.count === 'voice' ? 'on' : ''}">Голос</button><button data-k="count" data-v="beep" class="${settings.count === 'beep' ? 'on' : ''}">Сигналы</button></div></div>
+      <div class="opt vopt"><div>Голос<small>Мягче звучат «улучшенные» голоса: Настройки iPhone → Универсальный доступ → Зрение → Устный контент → Голоса → Русский → Milena (улучшенная). Потом закрой и снова открой приложение, голос появится здесь.</small></div><select id="vsel"><option value="">Авто</option>${('speechSynthesis' in window ? speechSynthesis.getVoices().filter(v => /^ru/i.test(v.lang)) : []).map(v => `<option value="${esc(v.voiceURI)}" ${settings.voice === v.voiceURI ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select></div>
       <div class="opt"><div>Скорость речи</div><input type="range" min="0.7" max="1.3" step="0.05" value="${settings.rate}" id="rate"></div>
       <div class="opt"><small id="diag">${esc(Snd.diag())}</small></div>
       <button class="big sec" id="test">Проверить звук</button><button class="big" id="sclose">Готово</button></div>`;
     s.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { const k = b.dataset.k, v = b.dataset.v; settings[k] = (k === 'names' || k === 'tips') ? v === '1' : v; saveSettings(); draw(); });
+    $('#vsel').onchange = e => { settings.voice = e.target.value; Snd.voice = null; saveSettings(); Snd.unlock(); Snd.say('Подъём коленей к локтю'); };
     $('#rate').oninput = e => { settings.rate = Number(e.target.value); saveSettings(); };
     $('#test').onclick = () => { Snd.unlock(); Snd.beep(660, 0.25, 0.4); setTimeout(() => { const d = $('#diag'); if (d) d.textContent = Snd.diag(); }, 300); setTimeout(() => Snd.say('Русский твист'), 450); setTimeout(() => { cue(3); setTimeout(() => cue(2), 1000); setTimeout(() => cue(1), 2000); setTimeout(stopSound, 3000); }, 2200); };
     $('#sclose').onclick = () => { s.hidden = true; };
@@ -477,10 +512,10 @@ function enter(i) {
   const s = run.steps[i]; if (!s) return finish();
   if (s.k === 'time' || s.k === 'rest') { run.endAt = performance.now() + s.sec * 1000 / SPEED; run.dur = s.sec * 1000; }
   if (s.k === 'time' || s.k === 'reps') {
-    const e = EX[s.ex], first = s.stretch && !run.steps.slice(0, i).some(x => x.stretch), side = e.side ? ' на каждую ногу' : '';
+    const e = EX[s.ex], first = s.stretch && !run.steps.slice(0, i).some(x => x.stretch), side = e.side ? ' на каждую ' + e.side : '';
     let say = (first ? 'Теперь растяжка. ' : '') + e.name + (s.part ? '. ' + s.part : '');
     if (s.k === 'reps') say = s.db ? `${s.set === 1 ? e.name + '. ' : ''}Подход ${s.set}. ${s.reps} раз${side}` : `${e.name}. ${s.reps} раз${side}`;
-    else if (e.side && !s.stretch) say += '. На каждую ногу';
+    else if (e.side && !s.stretch) say += '. На каждую ' + e.side;
     speakName(say);
     if (settings.tips && e.tip && !run.tipped.has(s.ex)) { Snd.say(e.tip, !settings.names); }
     run.tipped.add(s.ex);
@@ -529,8 +564,8 @@ function renderRun() {
   if (s.k === 'reps') {
     ring = `<div class="num"><b>${s.reps}</b><small>${s.db ? 'повторений' : 'раз'}</small></div>`;
     if (s.db) {
-      const w = getW(s.ex, s.def);
-      line = `Подход ${s.set} из ${s.sets}<span class="wt"><button id="wm" aria-label="Меньше">−</button><b>${num(w)} кг</b><button id="wp" aria-label="Больше">+</button></span>`;
+      const w = s.bw ? 0 : getW(s.ex, s.def);
+      line = s.bw ? `Подход ${s.set} из ${s.sets}` : `Подход ${s.set} из ${s.sets}<span class="wt"><button id="wm" aria-label="Меньше">−</button><b>${num(w)} кг</b><button id="wp" aria-label="Больше">+</button></span>`;
     }
     btns = '<button class="big" id="ok">ГОТОВО</button>';
   } else {
@@ -555,7 +590,7 @@ function renderRun() {
     });
   };
   $('#gear').onclick = openSettings;
-  const tb = $('#tipbtn'); if (tb) tb.onclick = () => { const e = EX[exId]; openSheet(`<h3>${esc(e.name)}</h3>${e.side ? '<div class="opt"><div>Выполняй на каждую ногу</div></div>' : ''}<div class="opt"><div class="tiptext">${esc(e.tip)}</div></div><button class="big" id="tipx">Понятно</button>`, () => { $('#tipx').onclick = closeSheet; }); };
+  const tb = $('#tipbtn'); if (tb) tb.onclick = () => { const e = EX[exId]; openSheet(`<h3>${esc(e.name)}</h3>${e.side ? `<div class="opt"><div>Выполняй на каждую ${e.side}</div></div>` : ''}<div class="opt"><div class="tiptext">${esc(e.tip)}</div></div><button class="big" id="tipx">Понятно</button>`, () => { $('#tipx').onclick = closeSheet; }); };
   const pp = $('#pp'); if (pp) pp.onclick = togglePause;
   const ok = $('#ok'); if (ok) ok.onclick = () => { Snd.beep(660, 0.08, 0.25); enter(run.i + 1); };
   const sk = $('#skip'); if (sk) sk.onclick = () => enter(run.i + 1);

@@ -18,8 +18,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .rbtn.ghost { visibility: hidden; }
 
 /* --- home --- */
-.tabs { display: flex; gap: 8px; padding: 6px 14px 14px; }
-.tab { flex: 1; padding: 10px 0; border-radius: 12px; background: var(--card); color: var(--dim); font-weight: 600; }
+.tabs { display: flex; gap: 8px; padding: 6px 14px 14px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: 1 0 auto; padding: 10px 14px; white-space: nowrap; border-radius: 12px; background: var(--card); color: var(--dim); font-weight: 600; }
 .tab.on { background: #fff; color: #000; }
 .pcard { position: relative; display: block; width: calc(100% - 28px); margin: 0 14px 10px; height: 150px; border-radius: 16px; overflow: hidden; text-align: left; padding: 16px; background: linear-gradient(150deg, #3b3b3e 0%, #121213 70%); border: 1px solid var(--line); }
 .pcard::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 85% 20%, rgba(255,255,255,.14), transparent 55%); }
@@ -184,7 +185,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .tiptext { font-size: 16px; line-height: 1.4; color: #e5e5e7; }
 
 /* карточки программ: сложность, подсказка, заглушки */
-.tabs { gap: 6px; } .tab { font-size: 14px; padding: 10px 0; }
+.tabs { gap: 6px; } .tab { font-size: 14px; padding: 10px 14px; }
 .pcard::before { pointer-events: none; }
 .pmain { position: absolute; inset: 0; width: 100%; text-align: left; padding: 16px; }
 .pmain b { position: relative; font-size: 22px; font-weight: 600; display: block; }
@@ -224,3 +225,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 #psave { display: block; width: calc(100% - 28px); margin: 18px 14px 0; }
 .pmain { display: block; }
 .pmain { display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start; }
+.vopt { align-items: flex-start; flex-wrap: wrap; }
+#vsel { background: #2c2c2e; color: #fff; border: 0; border-radius: 10px; padding: 8px 10px; font-size: 15px; max-width: 170px; }
+.tin { width: 96px; background: #2c2c2e; color: #fff; border: 0; border-radius: 10px; padding: 8px 10px; font: 17px system-ui; text-align: right; -webkit-user-select: text; user-select: text; }
